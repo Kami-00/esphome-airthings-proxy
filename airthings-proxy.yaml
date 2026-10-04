@@ -1,0 +1,241 @@
+esphome:
+  name: airthings-proxy
+
+external_components:
+  # Project-local copy of the installed ESPHome 2026.6.5 Bluetooth proxy.
+  # It exposes a read-only active-connection count for the LCD diagnostic.
+  - source:
+      type: local
+      path: components
+    components: [bluetooth_proxy]
+
+esp32:
+  # ESP32-C6-GEEK uses an ESP32-C6 with 16 MB flash. The generic
+  # ESP32-C6-DevKitC-1 PlatformIO definition is electrically compatible.
+  board: esp32-c6-devkitc-1
+  variant: esp32c6
+  flash_size: 16MB
+  framework:
+    type: esp-idf
+
+logger:
+
+api:
+  encryption:
+    key: !secret api_encryption_key
+
+ota:
+  - platform: esphome
+    password: !secret ota_password
+
+wifi:
+  ssid: !secret wifi_ssid
+  password: !secret wifi_password
+  ap:
+    ssid: "Airthings Proxy Fallback"
+    password: !secret fallback_ap_password
+
+captive_portal:
+
+esp32_ble_tracker:
+  scan_parameters:
+    active: true
+
+bluetooth_proxy:
+  active: true
+
+# The Waveshare ESP-IDF reference project documents the ST7789P3 LCD on
+# GPIO1/2/3/4/5/6 and 40 MHz SPI. The native ST7789P3 address window is
+# 135x240 at offset 52x40, leaving the 53x40 controller pad documented in
+# the Waveshare Arduino reference; defining both avoids unpainted pixels after
+# a cold start when the image is rotated.
+spi:
+  clk_pin: GPIO1
+  mosi_pin: GPIO2
+
+output:
+  - platform: ledc
+    pin: GPIO6
+    id: lcd_backlight_pwm
+    frequency: 1000Hz
+
+light:
+  - platform: monochromatic
+    id: lcd_backlight
+    output: lcd_backlight_pwm
+    restore_mode: ALWAYS_ON
+
+font:
+  - file: "gfonts://Roboto"
+    id: lcd_title_font
+    size: 20
+  - file: "gfonts://Roboto"
+    id: lcd_value_font
+    size: 16
+  - file: "gfonts://Roboto"
+    id: lcd_status_font
+    size: 14
+
+globals:
+  - id: last_ha_update_ms
+    type: uint32_t
+    restore_value: no
+    initial_value: "0"
+
+sensor:
+  - platform: homeassistant
+    id: airthings_radon
+    entity_id: sensor.airthings_wave_231361_radon_1_tages_durchschnitt
+    internal: true
+    on_value:
+      then:
+        - lambda: id(last_ha_update_ms) = millis();
+  - platform: homeassistant
+    id: airthings_co2
+    entity_id: sensor.airthings_wave_231361_kohlendioxid
+    internal: true
+    on_value:
+      then:
+        - lambda: id(last_ha_update_ms) = millis();
+  - platform: homeassistant
+    id: airthings_humidity
+    entity_id: sensor.airthings_wave_231361_luftfeuchtigkeit
+    internal: true
+    on_value:
+      then:
+        - lambda: id(last_ha_update_ms) = millis();
+  - platform: homeassistant
+    id: airthings_temperature
+    entity_id: sensor.airthings_wave_231361_temperatur
+    internal: true
+    on_value:
+      then:
+        - lambda: id(last_ha_update_ms) = millis();
+  - platform: homeassistant
+    id: airthings_voc
+    entity_id: sensor.airthings_wave_231361_vocs
+    internal: true
+    on_value:
+      then:
+        - lambda: id(last_ha_update_ms) = millis();
+  - platform: homeassistant
+    id: solar_pv_power
+    entity_id: sensor.solar_alle_pv_wattleistung
+    internal: true
+    on_value:
+      then:
+        - lambda: id(last_ha_update_ms) = millis();
+  - platform: homeassistant
+    id: solar_charge_power
+    entity_id: sensor.solar_ladeaufstellung
+    internal: true
+    on_value:
+      then:
+        - lambda: id(last_ha_update_ms) = millis();
+  - platform: homeassistant
+    id: solar_load_power
+    entity_id: sensor.solar_lastverbrauch
+    internal: true
+    on_value:
+      then:
+        - lambda: id(last_ha_update_ms) = millis();
+  - platform: template
+    name: "Active BLE Connections"
+    id: active_ble_connections
+    icon: mdi:bluetooth-settings
+    entity_category: diagnostic
+    update_interval: 10s
+    lambda: |-
+      return bluetooth_proxy::global_bluetooth_proxy->get_active_connection_count();
+
+display:
+  - platform: mipi_spi
+    id: airthings_lcd
+    model: ST7789P
+    cs_pin: GPIO5
+    dc_pin: GPIO3
+    reset_pin: GPIO4
+    dimensions:
+      width: 135
+      height: 240
+      offset_width: 52
+      offset_height: 40
+      pad_width: 53
+      pad_height: 40
+    rotation: 180
+    invert_colors: true
+    data_rate: 40MHz
+    # Official Waveshare ST7789P3 initialization sequence.
+    init_sequence:
+      - [0x36, 0x70]
+      - [0xB2, 0x0C, 0x0C, 0x00, 0x33, 0x33]
+      - [0xB7, 0x35]
+      - [0xBB, 0x19]
+      - [0xC0, 0x2C]
+      - [0xC2, 0x01]
+      - [0xC3, 0x12]
+      - [0xC4, 0x20]
+      - [0xC6, 0x0F]
+      - [0xD0, 0xA4, 0xA1]
+      - [0xE0, 0xD0, 0x04, 0x0D, 0x11, 0x13, 0x2B, 0x3F, 0x54, 0x4C, 0x18, 0x0D, 0x0B, 0x1F, 0x23]
+      - [0xE1, 0xD0, 0x04, 0x0C, 0x11, 0x13, 0x2C, 0x3F, 0x44, 0x51, 0x2F, 0x1F, 0x1F, 0x20, 0x23]
+      - [0x21]
+      - [0x11]
+      - delay 120ms
+      - [0x29]
+    update_interval: 5s
+    lambda: |-
+      it.fill(Color::BLACK);
+      if (isnan(id(airthings_temperature).state)) {
+        it.printf(0, 16, id(lcd_value_font), Color::WHITE, "Temp: --");
+      } else {
+        it.printf(0, 16, id(lcd_value_font), Color::WHITE, "Temp: %.1f C", id(airthings_temperature).state);
+      }
+      if (isnan(id(airthings_humidity).state)) {
+        it.printf(0, 39, id(lcd_value_font), Color::WHITE, "Luft: --");
+      } else {
+        it.printf(0, 39, id(lcd_value_font), Color::WHITE, "Luft: %.0f %%", id(airthings_humidity).state);
+      }
+      if (isnan(id(airthings_co2).state)) {
+        it.printf(0, 62, id(lcd_value_font), Color::WHITE, "CO2: --");
+      } else {
+        it.printf(0, 62, id(lcd_value_font), Color::WHITE, "CO2: %.0f ppm", id(airthings_co2).state);
+      }
+      if (isnan(id(airthings_radon).state)) {
+        it.printf(0, 85, id(lcd_value_font), Color::WHITE, "Radon: --");
+      } else {
+        it.printf(0, 85, id(lcd_value_font), Color::WHITE, "Radon: %.0fBq", id(airthings_radon).state);
+      }
+      if (isnan(id(airthings_voc).state)) {
+        it.printf(0, 108, id(lcd_value_font), Color::WHITE, "VOC: --");
+      } else {
+        it.printf(0, 108, id(lcd_value_font), Color::WHITE, "VOC: %.0f ppb", id(airthings_voc).state);
+      }
+      if (isnan(id(solar_pv_power).state)) {
+        it.printf(0, 131, id(lcd_value_font), Color::WHITE, "PV: --");
+      } else {
+        it.printf(0, 131, id(lcd_value_font), Color::WHITE, "PV: %.0f W", id(solar_pv_power).state);
+      }
+      if (isnan(id(solar_charge_power).state)) {
+        it.printf(0, 154, id(lcd_value_font), Color::WHITE, "Batt: --");
+      } else {
+        it.printf(0, 154, id(lcd_value_font), Color::WHITE, "Batt: %.0f %%", id(solar_charge_power).state);
+      }
+      if (isnan(id(solar_load_power).state)) {
+        it.printf(0, 177, id(lcd_value_font), Color::WHITE, "Last: --");
+      } else {
+        it.printf(0, 177, id(lcd_value_font), Color::WHITE, "Last: %.2f kW", id(solar_load_power).state);
+      }
+      if (id(last_ha_update_ms) == 0) {
+        it.printf(0, 204, id(lcd_status_font), Color::WHITE, "HA: warte");
+      } else {
+        const uint32_t age_seconds = (millis() - id(last_ha_update_ms)) / 1000;
+        if (age_seconds < 60) {
+          it.printf(0, 204, id(lcd_status_font), Color::WHITE, "HA: %us", age_seconds);
+        } else if (age_seconds < 3600) {
+          it.printf(0, 204, id(lcd_status_font), Color::WHITE, "HA: %um", age_seconds / 60);
+        } else {
+          it.printf(0, 204, id(lcd_status_font), Color::WHITE, "HA: %uh", age_seconds / 3600);
+        }
+      }
+      it.printf(0, 222, id(lcd_status_font), Color::WHITE, "BLE: %.0f / 3", id(active_ble_connections).state);

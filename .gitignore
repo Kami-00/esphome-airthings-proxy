@@ -1,0 +1,20 @@
+# Local credentials
+secrets.yaml
+
+# ESPHome build products and local state
+.esphome/
+
+# Local-only data and credentials
+.DS_Store
+._*
+.claude/
+.openai/
+.wrangler/
+.esphome/
+node_modules/
+.env
+.env.*
+!.env.example
+.dev.vars*
+secrets.yaml
+worker-configuration.d.ts
